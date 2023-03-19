@@ -13,17 +13,22 @@ library(gbm)
 library(fastDummies)
 library(rsample)
 library(ROCR)
+library(sciplot)
+library(ggplot2)
 
 ## load in MalAvi with traits
 setwd("/Users/danielbecker/Desktop/prpred")
 data=read.csv("MalAvi with host traits.csv")
 
-## get orders of positive birds
+## get families and orders of (screened or) positive birds
+pos=data[data$Pr==1 | data$zero=="true zero",]
 pos=data[data$Pr==1,]
 porder=unique(pos$Order3) ## AVONET
-
+pfam=unique(pos$Family3) ## AVONET
+ 
 ## trim
 data=data[data$Order3%in%porder,]
+data=data[data$Family3%in%pfam,]
 
 ## clean traits
 data$X=NULL
@@ -50,7 +55,6 @@ data$Male=NULL
 data$Unknown=NULL
 data$Complete.measures=NULL
 data$Mass.Source=NULL
-data$Species.Status
 data$Reference.species=NULL
 data$Mass.Refs.Other=NULL
 data$Inference=NULL
@@ -69,6 +73,44 @@ data$X2010.IUCN.Red.List.category=NULL
 
 ## save raw
 raw=data
+
+## make binary columns for Habitat
+dums=dummy_cols(raw["Habitat"])
+
+## unique
+dums=dums[!duplicated(dums$Habitat),]
+
+## ensure all factor
+for(i in 1:ncol(dums)){
+  
+  ## column as factor
+  dums[,i]=factor(dums[,i])
+  
+}
+
+## merge
+data=merge(data,dums,by="Habitat",all.x=T)
+rm(dums)
+data$Habitat=NULL
+
+## make binary for Trophic.Niche
+dums=dummy_cols(raw["Trophic.Niche"])
+
+## unique
+dums=dums[!duplicated(dums$Trophic.Niche),]
+
+## ensure all factor
+for(i in 1:ncol(dums)){
+  
+  ## column as factor
+  dums[,i]=factor(dums[,i])
+  
+}
+
+## merge
+data=merge(data,dums,by="Trophic.Niche",all.x=T)
+rm(dums)
+data$Trophic.Niche=NULL
 
 ## make binary columns for family
 dums=dummy_cols(raw["Family3"])
@@ -166,10 +208,8 @@ set$Species3=NULL
 set$zero=NULL
 
 ## factors
-set$Habitat=factor(set$Habitat)
 set$Migration=factor(set$Migration)
 set$Trophic.Level=factor(set$Trophic.Level)
-set$Trophic.Niche=factor(set$Trophic.Niche)
 set$Primary.Lifestyle=factor(set$Primary.Lifestyle)
 set$urban=factor(set$urban)
 set$humanDisturbed=factor(set$humanDisturbed)
@@ -228,7 +268,7 @@ brt_part=function(seed,response){
   ## BRT
   set.seed(1)
   gbmOut=gbm(response ~ . ,data=dataTrain,
-             n.trees=1000,
+             n.trees=5000,
              distribution="bernoulli",
              shrinkage=0.001,
              interaction.depth=3,
@@ -298,5 +338,60 @@ brt_part=function(seed,response){
 }
 
 ## run function
-smax=10
+smax=5
 brts=lapply(1:smax,function(x) brt_part(seed=x,response="Pr"))
+
+## mean test AUC
+round(mean(sapply(brts,function(x) x$testAUC))*100,0)
+round(se(sapply(brts,function(x) x$testAUC))*100,2)
+## 80% accuracy +/- 1.74%
+
+## relative importance
+vinf=lapply(brts,function(x) x$rinf)
+vinf=do.call(rbind,vinf)
+
+## aggregate mean
+vdata=data.frame(aggregate(rel.inf~var,data=vinf,mean),
+                 aggregate(rel.inf~var,data=vinf,se)["rel.inf"])
+names(vdata)=c("var","rel.inf","rse")
+vdata=vdata[order(vdata$rel.inf,decreasing=T),]
+rm(vinf)
+
+## make rmin and rmax
+vdata$rmin=vdata$rel.inf-vdata$rse
+vdata$rmax=vdata$rel.inf+vdata$rse
+
+## trim
+vset=vdata
+vset=vset[vset$rel.inf>1,]
+vset=vset[order(vset$rel.inf),]
+vset$var=factor(vset$var,levels=unique(vset$var))
+
+## plot
+ggplot(vset,aes(reorder(var,rel.inf,max),rel.inf))+
+  geom_segment(aes(y=0,yend=rel.inf,
+                   x=var,xend=var))+
+  geom_point(size=1.5)+
+  #scale_y_sqrt()+
+  coord_flip()+
+  theme_bw()+
+  labs(x=NULL,
+       y="mean feature importance")+
+  theme(axis.title=element_text(size=10),
+        axis.text=element_text(size=8))+
+  theme(panel.grid.major=element_blank(),panel.grid.minor=element_blank())+
+  theme(axis.title.x=element_text(margin=margin(t=10,r=0,b=0,l=0)))+
+  theme(axis.title.y=element_text(margin=margin(t=0,r=10,b=0,l=0)))
+
+## average predictions
+apreds=lapply(brts,function(x) x$predict)
+apreds=do.call(rbind,apreds)
+
+## aggregate
+apreds=data.frame(aggregate(pred~tip,data=apreds,mean))
+
+## get basic info
+dat=raw[c("tip","English","Pr","zero","Migration","urban","Family3","Order3")]
+
+## merge
+apreds=merge(apreds,dat,by="tip")
