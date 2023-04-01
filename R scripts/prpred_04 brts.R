@@ -568,19 +568,17 @@ apreds=merge(apreds,dat,by="tip")
 
 ## threshold
 to=optimal.thresholds(data.frame(apreds[c('tip','Pr','pred')]),
-                      #threshold = 10001,
-                      opt.methods = "ObsPrev",
+                      threshold = 10001,
+                      opt.methods = 10,
                       req.sens = 0.95,
                       na.rm = TRUE)
-to
-table(apreds$pred>to$pred)
 
 ## binary
 apreds$bin=ifelse(apreds$pred>to$pred,1,0)
 table(apreds$bin)
 
 ## make known/unknown
-apreds$state=
+
 ## ridgeline
 library(ggridges)
 ggplot(apreds[!is.na(apreds$IUCN),],
