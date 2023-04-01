@@ -16,20 +16,37 @@ library(ROCR)
 library(sciplot)
 library(ggplot2)
 library(InformationValue)
+library(PresenceAbsence)
 
 ## load in MalAvi with traits
 setwd("/Users/danielbecker/Desktop/prpred")
 data=read.csv("MalAvi with host traits.csv")
+
+## tabulate labels
+table(data$Pr)
+round(prop.table(table(data$Pr)),2)
 
 ## get families and orders of (screened or) positive birds
 pos=data[data$Pr==1 | data$zero=="true zero",]
 pos=data[data$Pr==1,]
 porder=unique(pos$Order3) ## AVONET
 pfam=unique(pos$Family3) ## AVONET
- 
+
+## positive coverage
+length(porder)/length(unique(data$Order3))
+length(pfam)/length(unique(data$Family3))
+
+## tabulate when trimming by order
+round(prop.table(table(data[data$Order3%in%porder,"Pr"])),2)
+round(prop.table(table(data[data$Family3%in%pfam,"Pr"])),2)
+
 ## trim
-data=data[data$Order3%in%porder,]
+#data=data[data$Order3%in%porder,]
 data=data[data$Family3%in%pfam,]
+
+## tabulate labels
+table(data$Pr)
+prop.table(table(data$Pr))
 
 ## clean traits
 data$X=NULL
@@ -72,8 +89,40 @@ data$Species.Status=NULL
 data$IUCN=ifelse(data$X2010.IUCN.Red.List.category=="",NA,data$X2010.IUCN.Red.List.category)
 data$X2010.IUCN.Red.List.category=NULL
 
+## tabulate class and number of levels
+vars=melt(lapply(data, class))
+names(vars)=c("class","var")
+uset=data.frame(apply(data,2,function(x) length(unique(x))))
+names(uset)=c("levels")
+uset$var=rownames(uset)
+vars=merge(vars,uset,by="var")
+rm(uset)
+
+## if categorical & levels > 5, binary
+rm(vars)
+
 ## save raw
 raw=data
+
+## make binary columns for IUCN
+dums=dummy_cols(raw["IUCN"])
+
+## unique
+dums=dums[!duplicated(dums$IUCN),]
+
+## ensure all factor
+for(i in 1:ncol(dums)){
+  
+  ## column as factor
+  dums[,i]=factor(dums[,i])
+  
+}
+
+## merge
+data=merge(data,dums,by="IUCN",all.x=T)
+rm(dums)
+data$IUCN=NULL
+data$IUCN_NA=NULL
 
 ## make binary columns for Habitat
 dums=dummy_cols(raw["Habitat"])
@@ -93,6 +142,7 @@ for(i in 1:ncol(dums)){
 data=merge(data,dums,by="Habitat",all.x=T)
 rm(dums)
 data$Habitat=NULL
+data$Habitat_NA=NULL
 
 ## make binary for Trophic.Niche
 dums=dummy_cols(raw["Trophic.Niche"])
@@ -112,6 +162,7 @@ for(i in 1:ncol(dums)){
 data=merge(data,dums,by="Trophic.Niche",all.x=T)
 rm(dums)
 data$Trophic.Niche=NULL
+data$Trophic.Niche_NA=NULL
 
 ## make binary columns for family
 dums=dummy_cols(raw["Family3"])
@@ -165,7 +216,7 @@ vars=data.frame(apply(data,2,function(x) mode.prop(x)),
 ## get names
 vars$variables=rownames(vars)
 names(vars)=c("var","uniq","column")
-vars$var=round(vars$var,2)
+vars$var=round(vars$var,3)
 
 ## if homogenous (100%)
 vars$keep=ifelse(vars$var==1,"cut","keep")
@@ -175,7 +226,7 @@ vars=vars[order(vars$keep),]
 keeps=vars[-which(vars$keep=="cut"),]$column
 
 ## drop if no variation
-data=data[keeps]
+#data=data[keeps]
 rm(keeps,vars)
 
 ## assess missing values
@@ -214,7 +265,6 @@ set$Trophic.Level=factor(set$Trophic.Level)
 set$Primary.Lifestyle=factor(set$Primary.Lifestyle)
 set$urban=factor(set$urban)
 set$humanDisturbed=factor(set$humanDisturbed)
-set$IUCN=factor(set$IUCN)
 
 ## extract continuous vars
 vars=names(which(unlist(lapply(set,class))!="factor"))
@@ -458,7 +508,7 @@ brt_part=function(seed,response){
 }
 
 ## run function
-smax=50
+smax=10
 brts=lapply(1:smax,function(x) brt_part(seed=x,response="Pr"))
 
 ## mean test AUC
@@ -511,7 +561,31 @@ apreds=do.call(rbind,apreds)
 apreds=data.frame(aggregate(pred~tip,data=apreds,mean))
 
 ## get basic info
-dat=raw[c("tip","English","Pr","zero","Migration","urban","Family3","Order3")]
+dat=raw[c("tip","English","Pr","zero","Migration","urban","Family3","Order3","IUCN")]
 
 ## merge
 apreds=merge(apreds,dat,by="tip")
+
+## threshold
+to=optimal.thresholds(data.frame(apreds[c('tip','Pr','pred')]),
+                      #threshold = 10001,
+                      opt.methods = "ObsPrev",
+                      req.sens = 0.95,
+                      na.rm = TRUE)
+to
+table(apreds$pred>to$pred)
+
+## binary
+apreds$bin=ifelse(apreds$pred>to$pred,1,0)
+table(apreds$bin)
+
+## make known/unknown
+apreds$state=
+## ridgeline
+library(ggridges)
+ggplot(apreds[!is.na(apreds$IUCN),],
+       aes(pred,IUCN))+
+  geom_density_ridges()+
+  facet_wrap(~Pr)+
+  scale_x_continuous(trans="log10")
+
