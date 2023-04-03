@@ -15,7 +15,7 @@ library(easyPubMed)
 setwd("/Users/danielbecker/Desktop/prpred")
 data=read.csv("MalAvi with host traits.csv")
 
-## collect citations per host species
+## collect citations per host species, using latin AND common
 cites=c()
 for(i in 1:length(data$tip)) {
   
@@ -23,17 +23,29 @@ for(i in 1:length(data$tip)) {
   x=strsplit(data$tip[i]," ")[[1]]
   
   ## paste
-  x=paste(x[1],"AND",x[2])
+  x=paste(x,collapse=" AND ")
+  
+  ## repeat for common name
+  y=strsplit(data$English[i]," ")[[1]]
+  y=paste(y,collapse=" AND ")
+  
+  ## add parentheses
+  x=paste("(",x,")",sep="")
+  y=paste("(",y,")",sep="")
+  
+  ## combine
+  xy=paste(x," AND ",y,sep="")
   
   ## get citations
-  counts=as.numeric(as.character(get_pubmed_ids(x)$Count))
+  counts=as.numeric(as.character(get_pubmed_ids(xy)$Count))
   cites[i]=counts
-  print(paste(i,"/",nrow(data)))
+  print(paste(data$tip[i],", cites = ",counts,", ",i,"/",nrow(data),sep=""))
 }
 
 ## compile all citations
 cdata=data.frame(tip=data$tip,
                  cites=cites)
 
-
-
+## export
+setwd("/Users/danielbecker/Desktop/prpred")
+write.csv(cdata,"BirdTree citations.csv")

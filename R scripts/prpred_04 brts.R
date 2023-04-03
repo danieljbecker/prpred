@@ -1,7 +1,7 @@
 ## Plasmodium relictum prediction (prpred)
-## 03_brts
+## 04_brts
 ## danbeck@ou.edu
-## last updated 3/18/2023
+## last updated 4/2/2023
 
 ## clean environment & plots
 rm(list=ls()) 
@@ -21,6 +21,19 @@ library(PresenceAbsence)
 ## load in MalAvi with traits
 setwd("/Users/danielbecker/Desktop/prpred")
 data=read.csv("MalAvi with host traits.csv")
+
+## combine with cites
+cdata=read.csv("BirdTree citations.csv")
+data=merge(data,cdata,by="tip")
+rm(cdata)
+
+## clean
+data$X.x=NULL
+data$X.y=NULL
+
+## fix citations
+data$lcites=log1p(data$cites)
+data$cites=NULL
 
 ## tabulate labels
 table(data$Pr)
@@ -202,33 +215,6 @@ data=merge(data,dums,by="Order3",all.x=T)
 rm(dums)
 data$Order3=NULL
 
-## mode function
-mode.prop <- function(x) {
-  ux <- unique(x[is.na(x)==FALSE])
-  tab <- tabulate(match(na.omit(x), ux))
-  max(tab)/length(x[is.na(x)==FALSE])
-}
-
-## assess variation across columns
-vars=data.frame(apply(data,2,function(x) mode.prop(x)),
-                apply(data,2,function(x) length(unique(x))))
-
-## get names
-vars$variables=rownames(vars)
-names(vars)=c("var","uniq","column")
-vars$var=round(vars$var,3)
-
-## if homogenous (100%)
-vars$keep=ifelse(vars$var==1,"cut","keep")
-vars=vars[order(vars$keep),]
-
-## trim
-keeps=vars[-which(vars$keep=="cut"),]$column
-
-## drop if no variation
-#data=data[keeps]
-rm(keeps,vars)
-
 ## assess missing values
 mval=data.frame(apply(data,2,function(x) length(x[!is.na(x)])/nrow(raw)))
 
@@ -247,7 +233,7 @@ mval=mval[order(mval$comp),]
 
 ## drop if not well represented
 data=data[keeps]
-rm(mval,keeps,porder,i,mode.prop)
+rm(mval,keeps,porder,i)
 
 ## set
 set=data
@@ -258,6 +244,9 @@ set$English=NULL
 set$BLFamilyLatin=NULL
 set$Species3=NULL
 set$zero=NULL
+
+## tally
+ncol(set)-2 ## tip and Pr
 
 ## factors
 set$Migration=factor(set$Migration)
@@ -288,6 +277,9 @@ set$Beak.Length_Nares=NULL
 
 ## clean
 rm(vars,pos,cset,cmat)
+
+## tally
+ncol(set)-2 ## tip and Pr
 
 # ## hyperparameter grid
 # hgrid=expand.grid(n.trees=6000,
@@ -482,14 +474,21 @@ brt_part=function(seed,response){
   bars=summary(gbmOut,n.trees=best.iter,plotit=F)
   bars$rel.inf=round(bars$rel.inf,2)
   
-  ## predict
+  ## temporary dataset to fix citations at the mean
+  temp=set
+  temp$lcites=mean(temp$lcites,na.rm=T)
+  
+  ## predict with cites included
   preds=predict(gbmOut,set,n.trees=best.iter,type="response")
   pred_data=raw[c("tip","zero","Pr","English")]
   pred_data$pred=preds
   pred_data$type=response
   
+  ## fix citations
+  pred_data$pred_cites=predict(gbmOut,temp,n.trees=best.iter,type="response")
+  
   ## sort
-  pred_data=pred_data[order(pred_data$pred,decreasing=T),]
+  pred_data=pred_data[order(pred_data$pred_cites,decreasing=T),]
   
   ## print
   print(paste("BRT ",seed," done; test AUC = ",round(auc_test,3),sep=""))
@@ -508,7 +507,7 @@ brt_part=function(seed,response){
 }
 
 ## run function
-smax=10
+smax=100
 brts=lapply(1:smax,function(x) brt_part(seed=x,response="Pr"))
 
 ## mean test AUC

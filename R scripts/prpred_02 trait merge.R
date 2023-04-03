@@ -1,7 +1,7 @@
 ## Plasmodium relictum prediction (prpred)
 ## 02_trait merge
 ## danbeck@ou.edu
-## last updated 3/18/2023
+## last updated 4/2/2023
 
 ## clean environment & plots
 rm(list=ls()) 
@@ -11,6 +11,8 @@ gc()
 ## libraries
 library(plyr)
 library(readxl)
+library(ape)
+library(phyloregion)
 
 ## load flat files
 setwd("/Users/danielbecker/Desktop/prpred/MalAvi flat files")
@@ -144,12 +146,46 @@ rm(set)
 pnames$tip=pnames$Scientific
 data=merge(pnames,data,by="tip",all=T)
 
+## clean
+rm(pnames)
+
 ## assign pseudoabsences
 data$zero=ifelse(is.na(data$Pr),"pseudoabsence","true zero")
 data$Pr=ifelse(is.na(data$Pr),0,data$Pr)
 
-## clean
-rm(pnames)
+## load BirdTree consensus phylogeny
+setwd("/Users/danielbecker/Desktop/prpred/BirdTree phylo")
+tree=readRDS("BirdNet 2K tree consensus.rds")
+
+## fix labels
+tree$tip.label=gsub("_"," ",tree$tip.label)
+
+## check
+mis=setdiff(tree$tip.label,data$tip)
+rm(mis)
+
+## evolutionary distinctiveness
+a=phyloregion::evol_distinct(tree,type="fair.proportion")
+b=phyloregion::evol_distinct(tree,type="equal.splits")
+
+## check correlation
+cor(a,b)
+
+## save
+a=data.frame(ed_fair=a)
+b=data.frame(ed_equal=b)
+
+## names
+a$tip=rownames(a)
+b$tip=rownames(b)
+
+## merge
+edata=merge(a,b,by="tip")
+rm(a,b)
+
+## combine into data
+data=merge(data,edata,by="tip")
+rm(edata)
 
 ## load AVONET
 setwd("/Users/danielbecker/OneDrive - University of Oklahoma/Becker Lab/Datasets/AVONET")

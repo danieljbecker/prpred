@@ -1,7 +1,7 @@
 ## Plasmodium relictum prediction (prpred)
 ## 01_MalAvi clean
 ## danbeck@ou.edu
-## last updated 3/18/2023
+## last updated 4/2/2023
 
 ## clean environment & plots
 rm(list=ls()) 
