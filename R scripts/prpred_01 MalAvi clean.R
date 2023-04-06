@@ -1,7 +1,7 @@
 ## Plasmodium relictum prediction (prpred)
 ## 01_MalAvi clean
 ## danbeck@ou.edu
-## last updated 4/5/2023
+## last updated 4/6/2023
 
 ## clean environment & plots
 rm(list=ls()) 
@@ -29,55 +29,56 @@ hstab=extract_table("Hosts and Sites Table")
 ## make Pr
 hstab$Pr=ifelse(hstab$Lineage_Name%in%lins,1,0)
 
-## aggregate
-hstab$id=with(hstab,paste(Lineage_Name,species,sep="_"))
-hspr=aggregate(cbind(found,tested)~id,data=hstab,sum)
+## just edgelist
+#edge=hstab[hstab$Pr==1,]
+edge=hstab
 
-## bind in with hspr
-hset=hstab[!duplicated(hstab$id),]
-hset=hset[c("Lineage_Name","order","family","genus","species","id","Pr")]
-hdata=merge(hset,hspr,by="id",all.x=T)
+## unique
+edge$id=with(edge,paste(Lineage_Name,species,sep="_"))
+edge$record=1
+
+## aggregate
+esum1=data.frame(aggregate(record~id,data=edge,sum))
+esum2=data.frame(aggregate(Pr~id,data=edge,sum))
+esum=merge(esum1,esum2,by="id")
+rm(esum1,esum2)
+
+## fix
+esum$Pr=ifelse(esum$Pr>0,1,0)
+
+## bind in with edge
+edge=edge[!duplicated(edge$id),]
+edge=edge[c("Lineage_Name","parasiteGenus","order","family","genus","species","id")]
+edge=merge(edge,esum,by="id",all.x=T)
 
 ## clean
-rm(hstab,hset,hspr)
-
-## save
-data=hdata
-rm(hdata)
+rm(hstab,lins,esum)
 
 ## flag hybrids
-x=strsplit(data$species," ")
-data$length=sapply(x,length)
+x=strsplit(edge$species," ")
+edge$length=sapply(x,length)
 
 ## flag genus only
 x=sapply(x,function(x) x[2])
-data$sp=x
+edge$sp=x
 
 ## remove hybrids and genus only
-data=data[!data$length>2,]
-data=data[!data$sp%in%c("sp","sp.","spp","spp."),]
+edge=edge[!edge$length>2,]
+edge=edge[!edge$sp%in%c("sp","sp.","spp","spp."),]
 
 ## clean
-data$length=NULL
-data$sp=NULL
+edge$length=NULL
+edge$sp=NULL
 
 ## match taxonomy
 tax=taxonomy
 
 ## merge in with data
-data=merge(data,tax,by="species",all.x=T)
-
-## trim to host binary
-bindata=data[!duplicated(data$species),]
-bindata=bindata[c("species","id","order","family","genus","Pr","Jetz.species","match")]
-
-## trim to Pr only
-prdata=data[data$Pr==1,]
+edge=merge(edge,tax,by="species",all.x=T)
 
 ## clean
-rm(lins,tax,data)
+rm(x,tax)
 
-## export flat files
+## export flat file
 setwd("/Users/danielbecker/Desktop/prpred/MalAvi flat files")
-write.csv(bindata,"binary Plasmodium relictum status MalAvi.csv")
-write.csv(prdata,"Plasmodium relictum positivity MalAvi.csv")
+write.csv(edge,"MalAvi edgelist_cleaned.csv")

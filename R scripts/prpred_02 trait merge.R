@@ -1,7 +1,7 @@
 ## Plasmodium relictum prediction (prpred)
 ## 02_trait merge
 ## danbeck@ou.edu
-## last updated 4/2/2023
+## last updated 4/6/2023
 
 ## clean environment & plots
 rm(list=ls()) 
@@ -16,37 +16,37 @@ library(phyloregion)
 
 ## load flat files
 setwd("/Users/danielbecker/Desktop/prpred/MalAvi flat files")
-data=read.csv("binary Plasmodium relictum status MalAvi.csv")
-data$X=NULL
+edge=read.csv("MalAvi edgelist_cleaned.csv")
+edge$X=NULL
 
 ## fix Jetz
-data$Jetz.species=ifelse(data$Jetz.species=="",NA,data$Jetz.species)
+edge$Jetz.species=ifelse(edge$Jetz.species=="",NA,edge$Jetz.species)
 
 ## if Jetz match, use that name
-data$tip=ifelse(is.na(data$Jetz.species),data$species,data$Jetz.species)
+edge$tip=ifelse(is.na(edge$Jetz.species),edge$species,edge$Jetz.species)
+
+## make new id
+edge$id=paste(edge$tip,edge$Lineage_Name,sep="_")
 
 ## aggregate
-set=aggregate(Pr~tip,data=data,sum)
-set$Pr=ifelse(set$Pr>0,1,0)
-
-## bind back with data
-data=data[!duplicated(data$tip),]
-data$Pr=NULL
-data=merge(data,set,by="tip")
+set=aggregate(record~id,data=edge,sum)
+edge=edge[!duplicated(edge$id),]
+edge$record=NULL
+edge=merge(set,edge,by="id",all.x=T)
 rm(set)
 
 ## fix tip
-data$tip=gsub("_"," ",data$tip)
+edge$tip=gsub("_"," ",edge$tip)
 
 ## load BirdTree taxonomy for backbone
 setwd("~/OneDrive - University of Oklahoma/Becker Lab/Datasets/BirdTree")
 pnames=read.csv("BLIOCPhyloMasterTax.csv")
 
 ## check mismatch
-mis=setdiff(data$tip,pnames$Scientific) ## 80 mismatch
+mis=setdiff(edge$tip,pnames$Scientific) 
 
-## manually edit remaining 80 mismatch
-data$tip=revalue(data$tip,
+## manually edit mismatch
+edge$tip=revalue(edge$tip,
                  c("Acritillas indica"="Iole indica",
                    "Actitis macularia"="Actitis macularius",
                    "Anisognathus flavinuchus"="Anisognathus somptuosus",
@@ -129,18 +129,36 @@ data$tip=revalue(data$tip,
                    "Zoothera aurea"="Zoothera dauma"))
 
 ## recheck
-mis=setdiff(data$tip,pnames$Scientific)
+mis=setdiff(edge$tip,pnames$Scientific)
 rm(mis)
 
-## aggregate by tip
-set=aggregate(Pr~tip,data=data,sum)
-set$Pr=ifelse(set$Pr>0,1,0)
+## make new id
+edge$id=paste(edge$tip,edge$Lineage_Name,sep="_")
 
-## bind back with data
-data=data[!duplicated(data$tip),]
-data$Pr=NULL
-data=merge(data,set,by="tip")
+## aggregate
+set=aggregate(record~id,data=edge,sum)
+edge=edge[!duplicated(edge$id),]
+edge$record=NULL
+edge=merge(set,edge,by="id",all.x=T)
 rm(set)
+
+## export MalAvi edgelist harmonized
+setwd("/Users/danielbecker/Desktop/prpred/MalAvi flat files")
+write.csv(edge,"MalAvi edgelist_harmonized.csv")
+
+## simplify to Pr records
+pr_edge=edge[edge$Pr==1,]
+write.csv(pr_edge,"MalAvi edgelist_harmonized_Pr.csv")
+
+## simplify to known 0/1s
+data=aggregate(Pr~tip,data=edge,sum)
+data$Pr=ifelse(data$Pr>0,1,0)
+
+## merge metadata
+meta=edge[!duplicated(edge$tip),]
+meta=meta[c("tip","order","family","genus","Jetz.species")]
+data=merge(data,meta,by="tip")
+rm(meta)
 
 ## merge data with all birds
 pnames$tip=pnames$Scientific
@@ -152,6 +170,11 @@ rm(pnames)
 ## assign pseudoabsences
 data$zero=ifelse(is.na(data$Pr),"pseudoabsence","true zero")
 data$Pr=ifelse(is.na(data$Pr),0,data$Pr)
+
+## status
+data$status=ifelse(data$zero=="true zero" & data$Pr==1,"positive",
+                   ifelse(data$zero=="true zero" & data$Pr==0,"true zero",
+                          "pseudoabsence"))
 
 ## load BirdTree consensus phylogeny
 setwd("/Users/danielbecker/Desktop/prpred/BirdTree phylo")
@@ -215,6 +238,20 @@ gdata$animal=NULL
 gdata=gdata[c("tip","urban","humanDisturbed","invasion.potential","UTI","tolerance")]
 data=merge(data,gdata,by="tip",all.x=T)
 rm(gdata,mis,avonet)
+
+## combine with additional migration traits
+setwd("/Users/danielbecker/OneDrive - University of Oklahoma/Becker Lab/Datasets/Dufour et al 2019 Journal of Biogeography")
+dufor=read_xlsx("jbi13700-sup-0002-datas1.xlsx",1)
+
+## tip
+dufor$tip=gsub("_"," ",dufor$Sp.Scien.jetz)
+mis=setdiff(data$tip,dufor$tip)
+rm(mis)
+
+## merge
+data=merge(data,dufor[c("tip","strategy_3","distance_4","distance_quanti_RES0")],
+           by="tip",all.x=T)
+rm(dufor)
 
 ## export Pr with traits
 setwd("/Users/danielbecker/Desktop/prpred")
