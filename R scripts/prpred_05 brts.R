@@ -1,7 +1,7 @@
 ## Plasmodium relictum prediction (prpred)
-## 04_brts
+## 05_brts
 ## danbeck@ou.edu
-## last updated 4/2/2023
+## last updated 4/6/2023
 
 ## clean environment & plots
 rm(list=ls()) 
@@ -49,7 +49,7 @@ pfam=unique(pos$Family3) ## AVONET
 length(porder)/length(unique(data$Order3))
 length(pfam)/length(unique(data$Family3))
 
-## tabulate when trimming by order
+## tabulate when trimming by order vs family
 round(prop.table(table(data[data$Order3%in%porder,"Pr"])),2)
 round(prop.table(table(data[data$Family3%in%pfam,"Pr"])),2)
 
@@ -244,6 +244,7 @@ set$English=NULL
 set$BLFamilyLatin=NULL
 set$Species3=NULL
 set$zero=NULL
+set$status=NULL
 
 ## tally
 ncol(set)-2 ## tip and Pr
@@ -254,10 +255,12 @@ set$Trophic.Level=factor(set$Trophic.Level)
 set$Primary.Lifestyle=factor(set$Primary.Lifestyle)
 set$urban=factor(set$urban)
 set$humanDisturbed=factor(set$humanDisturbed)
+set$strategy_3=NULL
+set$distance_4=factor(set$distance_4)
 
 ## extract continuous vars
 vars=names(which(unlist(lapply(set,class))!="factor"))
-vars=vars[!vars%in%c("tip","Pr")]
+vars=vars[!vars%in%c("tip","Pr","status")]
 
 ## correlate
 cmat=round(cor(set[vars],use="complete.obs"),2)
@@ -430,7 +433,7 @@ brt_part=function(seed,response){
   ## BRT
   set.seed(1)
   gbmOut=gbm(response ~ . ,data=dataTrain,
-             n.trees=6000,
+             n.trees=10000,
              distribution="bernoulli",
              shrinkage=0.001,
              interaction.depth=4,
@@ -507,13 +510,13 @@ brt_part=function(seed,response){
 }
 
 ## run function
-smax=100
+smax=5
 brts=lapply(1:smax,function(x) brt_part(seed=x,response="Pr"))
 
 ## mean test AUC
 round(mean(sapply(brts,function(x) x$testAUC))*100,0)
 round(se(sapply(brts,function(x) x$testAUC))*100,2)
-## 80% accuracy +/- 1.74%
+## 85% accuracy +/- 0.99%
 
 ## relative importance
 vinf=lapply(brts,function(x) x$rinf)
