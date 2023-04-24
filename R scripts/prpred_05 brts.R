@@ -284,124 +284,133 @@ rm(vars,pos,cset,cmat)
 ## tally
 ncol(set)-2 ## tip and Pr
 
-# ## hyperparameter grid
-# hgrid=expand.grid(n.trees=6000,
-#                   interaction.depth=c(2,3,4),
-#                   shrinkage=c(0.01,0.001),
-#                   n.minobsinnode=c(4,5),
-#                   seed=seq(1,5,by=1),
-#                   prop=c(0.8,0.9))
-# 
-# ## trees, depth, shrink, min, prop
-# hgrid$id=with(hgrid,paste(n.trees,interaction.depth,shrinkage,n.minobsinnode))
-# 
-# ## sort by id then seed
-# hgrid=hgrid[order(hgrid$id,hgrid$seed),]
-# 
-# ## now add rows
-# hgrid$row=1:nrow(hgrid)
-# 
-# ## factor id
-# hgrid$id2=factor(as.numeric(factor(hgrid$id)))
-# 
-# ## function to assess each hyperpar combination
-# hfit=function(row){
-#   
-#   ## make new data
-#   ndata=set
-#   ndata$tip=NULL
-#   
-#   ## correct response
-#   ndata$response=ndata$Pr
-#   ndata$Pr=NULL
-#   
-#   ## use rsample to split
-#   set.seed(hgrid$seed[row])
-#   split=initial_split(ndata,prop=hgrid$prop[row],strata="response")
-#   
-#   ## test and train
-#   dataTrain=training(split)
-#   dataTest=testing(split)
-#   
-#   ## yTest and yTrain
-#   yTrain=dataTrain$response
-#   yTest=dataTest$response
-#   
-#   ## BRT
-#   set.seed(1)
-#   gbmOut=gbm(response ~ . ,data=dataTrain,
-#              n.trees=hgrid$n.trees[row],
-#              distribution="bernoulli",
-#              shrinkage=hgrid$shrinkage[row],
-#              interaction.depth=hgrid$interaction.depth[row],
-#              n.minobsinnode=hgrid$n.minobsinnode[row],
-#              cv.folds=5,class.stratify.cv=TRUE,
-#              bag.fraction=0.5,train.fraction=1,
-#              n.cores=1,
-#              verbose=F)
-#   
-#   ## performance
-#   par(mfrow=c(1,1),mar=c(4,4,1,1))
-#   best.iter=gbm.perf(gbmOut,method="cv")
-#   
-#   ## predict with test data
-#   preds=predict(gbmOut,dataTest,n.trees=best.iter,type="response")
-#   
-#   ## known
-#   result=dataTest$response
-#   
-#   ## sensitiviy and specificity
-#   sen=InformationValue::sensitivity(result,preds)
-#   spec=InformationValue::specificity(result,preds)
-#   
-#   ## AUC on train
-#   auc_train=gbm.roc.area(yTrain,predict(gbmOut,dataTrain,n.trees=best.iter,type="response"))
-#   
-#   ## AUC on test
-#   auc_test=gbm.roc.area(yTest,predict(gbmOut,dataTest,n.trees=best.iter,type="response"))
-#   
-#   ## print
-#   print(paste("hpar row ",row," done; test AUC is ",auc_test,sep=""))
-#   
-#   ## save outputs
-#   return(list(best=best.iter,
-#               trainAUC=auc_train,
-#               testAUC=auc_test,
-#               spec=spec,
-#               sen=sen,
-#               wrow=row))
-# }
-# 
-# ## run the function
-# hpars=lapply(1:nrow(hgrid),function(x) hfit(x))
-# 
-# ## export
-# setwd("/Users/danielbecker/Desktop/prpred")
-# saveRDS(hpars,"prpred_grid search 31923.rds")
-# 
-# ## get results
-# hresults=data.frame(sapply(hpars,function(x) x$trainAUC),
-#                     sapply(hpars,function(x) x$testAUC),
-#                     sapply(hpars,function(x) x$spec),
-#                     sapply(hpars,function(x) x$sen),
-#                     sapply(hpars,function(x) x$wrow),
-#                     sapply(hpars,function(x) x$best))
-# names(hresults)=c("trainAUC","testAUC",
-#                   "spec","sen","row","best")
-# 
-# ## combine and save
-# search=merge(hresults,hgrid,by="row")
-# 
-# ## ggplot
-# ggplot(search,aes(factor(interaction.depth),testAUC,group=factor(shrinkage),colour=factor(shrinkage)))+
-#   geom_boxplot()+theme_bw()+
-#   facet_grid(prop~n.minobsinnode)
-# 
-# ## aggregate
-# smean=aggregate(cbind(trainAUC,testAUC,spec,sen)~n.trees+interaction.depth+shrinkage+n.minobsinnode+prop,
-#                 data=search,mean)
+## hyperparameter grid
+hgrid=expand.grid(n.trees=5000,
+                  interaction.depth=c(2,3,4),
+                  shrinkage=c(0.1,0.01),
+                  n.minobsinnode=c(4,5),
+                  seed=seq(1,5,by=1),
+                  prop=c(0.8,0.9))
 
-## best pars = 90%, 4 ID, 0.001, nmin = 4
+## trees, depth, shrink, min, prop
+hgrid$id=with(hgrid,paste(n.trees,interaction.depth,shrinkage,n.minobsinnode))
+
+## sort by id then seed
+hgrid=hgrid[order(hgrid$id,hgrid$seed),]
+
+## now add rows
+hgrid$row=1:nrow(hgrid)
+
+## factor id
+hgrid$id2=factor(as.numeric(factor(hgrid$id)))
+
+## function to assess each hyperpar combination
+hfit=function(row){
+
+  ## make new data
+  ndata=set
+  ndata$tip=NULL
+
+  ## correct response
+  ndata$response=ndata$Pr
+  ndata$Pr=NULL
+
+  ## use rsample to split
+  set.seed(hgrid$seed[row])
+  split=initial_split(ndata,prop=hgrid$prop[row],strata="response")
+
+  ## test and train
+  dataTrain=training(split)
+  dataTest=testing(split)
+
+  ## yTest and yTrain
+  yTrain=dataTrain$response
+  yTest=dataTest$response
+
+  ## BRT
+  set.seed(1)
+  gbmOut=gbm(response ~ . ,data=dataTrain,
+             n.trees=hgrid$n.trees[row],
+             distribution="bernoulli",
+             shrinkage=hgrid$shrinkage[row],
+             interaction.depth=hgrid$interaction.depth[row],
+             n.minobsinnode=hgrid$n.minobsinnode[row],
+             cv.folds=5,class.stratify.cv=TRUE,
+             bag.fraction=0.5,train.fraction=1,
+             n.cores=1,
+             verbose=F)
+
+  ## performance
+  # par(mfrow=c(1,1),mar=c(4,4,1,1))
+  # best.iter=gbm.perf(gbmOut,method="cv")
+  best.iter=gbm.perf(gbmOut,method="cv",plot.it=F)
+
+  ## predict with test data
+  preds=predict(gbmOut,dataTest,n.trees=best.iter,type="response")
+
+  ## known
+  result=dataTest$response
+
+  ## sensitiviy and specificity
+  sen=InformationValue::sensitivity(result,preds)
+  spec=InformationValue::specificity(result,preds)
+
+  ## AUC on train
+  auc_train=gbm.roc.area(yTrain,predict(gbmOut,dataTrain,n.trees=best.iter,type="response"))
+
+  ## AUC on test
+  auc_test=gbm.roc.area(yTest,predict(gbmOut,dataTest,n.trees=best.iter,type="response"))
+
+  ## print
+  print(paste("hpar row ",row," done; test AUC is ",auc_test,sep=""))
+
+  ## save outputs
+  return(list(best=best.iter,
+              trainAUC=auc_train,
+              testAUC=auc_test,
+              spec=spec,
+              sen=sen,
+              wrow=row))
+}
+
+## run the function
+hpars=lapply(1:nrow(hgrid),function(x) hfit(x))
+
+## export
+setwd("/Users/danielbecker/Desktop/prpred")
+saveRDS(hpars,"prpred_grid search 42123.rds")
+
+## get results
+hresults=data.frame(sapply(hpars,function(x) x$trainAUC),
+                    sapply(hpars,function(x) x$testAUC),
+                    sapply(hpars,function(x) x$spec),
+                    sapply(hpars,function(x) x$sen),
+                    sapply(hpars,function(x) x$wrow),
+                    sapply(hpars,function(x) x$best))
+names(hresults)=c("trainAUC","testAUC",
+                  "spec","sen","row","best")
+
+## combine and save
+search=merge(hresults,hgrid,by="row")
+
+## export
+setwd("/Users/danielbecker/Desktop/prpred")
+write.csv(search,"prpred_grid search 42123.csv")
+
+## ggplot
+ggplot(search,aes(factor(interaction.depth),testAUC,colour=factor(shrinkage)))+
+  geom_boxplot()+theme_bw()+
+  facet_grid(prop~n.minobsinnode)
+
+## linear model test
+mod=lm(testAUC~factor(interaction.depth)+factor(shrinkage)+factor(prop)+factor(n.minobsinnode),data=search)
+anova(mod)
+summary(mod)
+## shrinkage = 0.01, prop = 0.8, ID = 4
+
+## aggregate
+smean=aggregate(cbind(trainAUC,testAUC,spec,sen)~n.trees+interaction.depth+shrinkage+n.minobsinnode+prop,
+                data=search,mean)
 
 ## function to use different data partitions
 brt_part=function(seed,response){
@@ -418,7 +427,7 @@ brt_part=function(seed,response){
   ## remove raw
   ndata$Pr=NULL
   
-  ## use rsample to split 90/10
+  ## use rsample to split 80/20
   set.seed(seed)
   split=initial_split(ndata,prop=0.90,strata="response")
   
@@ -433,9 +442,9 @@ brt_part=function(seed,response){
   ## BRT
   set.seed(1)
   gbmOut=gbm(response ~ . ,data=dataTrain,
-             n.trees=10000,
+             n.trees=5000,
              distribution="bernoulli",
-             shrinkage=0.001,
+             shrinkage=0.01,
              interaction.depth=4,
              n.minobsinnode=4,
              cv.folds=5,class.stratify.cv=TRUE,
@@ -510,7 +519,7 @@ brt_part=function(seed,response){
 }
 
 ## run function
-smax=5
+smax=25
 brts=lapply(1:smax,function(x) brt_part(seed=x,response="Pr"))
 
 ## mean test AUC
