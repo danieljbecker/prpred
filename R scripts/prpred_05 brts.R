@@ -429,7 +429,7 @@ brt_part=function(seed,response){
   
   ## use rsample to split 80/20
   set.seed(seed)
-  split=initial_split(ndata,prop=0.90,strata="response")
+  split=initial_split(ndata,prop=0.80,strata="response")
   
   ## test and train
   dataTrain=training(split)
@@ -519,7 +519,7 @@ brt_part=function(seed,response){
 }
 
 ## run function
-smax=25
+smax=50
 brts=lapply(1:smax,function(x) brt_part(seed=x,response="Pr"))
 
 ## mean test AUC
