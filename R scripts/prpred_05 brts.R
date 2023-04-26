@@ -473,7 +473,7 @@ brt_part=function(seed,response){
       
     ## ROC
     pr=prediction(preds,dataTest$response)
-    perf=performance(pr,measure="tpr",x.measure="fpr")
+    perf=ROCR::performance(pr,measure="tpr",x.measure="fpr")
     perf=data.frame(perf@x.values,perf@y.values)
     names(perf)=c("fpr","tpr")
       
@@ -525,7 +525,7 @@ brts=lapply(1:smax,function(x) brt_part(seed=x,response="Pr"))
 ## mean test AUC
 round(mean(sapply(brts,function(x) x$testAUC))*100,0)
 round(se(sapply(brts,function(x) x$testAUC))*100,2)
-## 85% accuracy +/- 0.99%
+## 90% accuracy +/- 0.3%
 
 ## relative importance
 vinf=lapply(brts,function(x) x$rinf)
