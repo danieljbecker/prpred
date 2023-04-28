@@ -598,3 +598,162 @@ ggplot(apreds[!is.na(apreds$IUCN),],
   facet_wrap(~Pr)+
   scale_x_continuous(trans="log10")
 
+## pdp
+detach("package:purrr", unload=TRUE)
+library(pdp)
+
+## function for compiling across BRTs for a given predictor, all else equal
+pdp_agg=function(mod,feature){
+  
+  ## just the plot function
+  pdep=plot(mod$mod,feature,
+            return.grid=T,
+            n.trees=mod$best,
+            plot=F,
+            continuous.resolution=200,
+            type="response")
+  
+  ## add seed
+  pdep$seed=unique(mod$roc$seed)
+  
+  ## save predictor
+  pdep$predictor=pdep[feature][,1]
+  
+  ## order
+  pdep=pdep[order(pdep$predictor),]
+  
+  ## get rank
+  pdep$rank=1:nrow(pdep)
+  
+  ## save yhat
+  pdep$yhat=pdep$y
+  
+  ## return
+  return(pdep)
+  
+}
+
+## function to plot
+pdp_plot=function(bmods,feature){
+  
+  ## pdp_agg
+  agg=do.call(rbind,lapply(bmods,function(x) pdp_agg(x,feature)))
+  
+  ## get class of the feature
+  cl=class(set[feature][,1])
+  
+  ## if else based on type
+  if(cl%in%c("numeric","integer")){
+    
+    ## get element-wise means
+    x=with(agg,tapply(predictor,rank,mean))
+    y=with(agg,tapply(yhat,rank,mean))
+    
+    ## save as mean
+    pmean=data.frame(predictor=x,yhat=y)
+    
+    ## get yrange
+    yrange=range(agg$yhat,pmean$yhat,na.rm=T)
+    
+    ## get histogram
+    hi=hist(raw[feature][,1],breaks=30,plot=F)
+    hi=with(hi,data.frame(breaks[1:(length(breaks)-1)],counts))
+    names(hi)=c("mids","counts")
+    
+    ## ggplot it
+    ggplot(agg,aes(predictor,yhat,group=seed))+
+      
+      ## add histogram
+      geom_segment(data=hi,inherit.aes=F,
+                   aes(x=mids,xend=mids,
+                       y=yrange[1],yend=plotrix::rescale(counts,yrange)),
+                   size=1,colour="grey",alpha=0.25)+
+      
+      ## add lines
+      geom_line(size=1,alpha=0.25,colour="grey")+
+      
+      ## add mean
+      geom_line(data=pmean,size=2,inherit.aes=F,
+                aes(predictor,yhat))+
+      
+      ## theme
+      theme_bw()+
+      theme(axis.text=element_text(size=6),
+            axis.title=element_text(size=7))+
+      theme(axis.title.x=element_text(margin=margin(t=5,r=0,b=0,l=0)))+
+      theme(axis.title.y=element_text(margin=margin(t=0,r=5,b=0,l=0)))+
+      theme(panel.grid.major=element_blank(),panel.grid.minor=element_blank())+
+      labs(x=feature,y="marginal effect")+
+      scale_y_continuous(labels=scales::number_format(accuracy=0.01))
+    
+    ## end numeric
+  }else{ ## factor-based plot
+    
+    ## get element-wise means
+    y=with(agg,tapply(yhat,predictor,mean))
+    
+    ## save as mean
+    #pmean=data.frame(predictor=x,yhat=y)
+    pmean=data.frame(y)
+    names(pmean)="yhat"
+    pmean$predictor=rownames(pmean)
+    rownames(pmean)=NULL
+    
+    ## make temp data
+    temp=set
+    temp$predictor=temp[feature][,1]
+    
+    ## do nothing
+    agg=agg
+    pmean=pmean
+    temp=temp
+    
+    ## get yrange
+    yrange=range(agg$yhat,pmean$yhat,na.rm=T)
+    
+    ## fix temp to yrange
+    temp$yhat=ifelse(temp$Pr==1,max(yrange),min(yrange))
+    
+    ## ggplot with rug
+    set.seed(1)
+    ggplot(agg,aes(predictor,yhat,group=seed))+
+      
+      ## add individual BRTs
+      geom_jitter(size=1,alpha=0.25,colour="grey",width=0.1)+
+      
+      ## add mean
+      geom_point(data=pmean,size=2,inherit.aes=F,shape=15,
+                 aes(predictor,yhat))+
+      
+      ## add rug
+      geom_rug(data=temp,inherit.aes=F,
+               aes(predictor,yhat),
+               sides="b",position="jitter",
+               colour="grey",alpha=0.25,
+               na.rm=T)+
+      
+      ## theme
+      theme_bw()+
+      theme(axis.text=element_text(size=6),
+            axis.title=element_text(size=7))+
+      theme(axis.title.x=element_text(margin=margin(t=5,r=0,b=0,l=0)))+
+      theme(axis.title.y=element_text(margin=margin(t=0,r=5,b=0,l=0)))+
+      theme(panel.grid.major=element_blank(),panel.grid.minor=element_blank())+
+      labs(x=feature,y="marginal effect")+
+      scale_y_continuous(limits=c(yrange[1]-0.01,yrange[2]+0.01),
+                         labels=scales::number_format(accuracy=0.01))
+    
+  }
+  
+}
+
+## visualize
+pdp_plot(brts,vdata$var[1])
+pdp_plot(brts,vdata$var[2])
+pdp_plot(brts,vdata$var[3])
+pdp_plot(brts,vdata$var[4])
+pdp_plot(brts,vdata$var[5])
+pdp_plot(brts,vdata$var[6])
+pdp_plot(brts,vdata$var[7])
+pdp_plot(brts,vdata$var[8])
+pdp_plot(brts,vdata$var[9])
